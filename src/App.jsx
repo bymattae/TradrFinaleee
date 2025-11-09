@@ -262,46 +262,7 @@ function SignupStepper({ signup, setSignup, signupStep, setSignupStep, onFinish 
   );
 }
 
-async function previewSignupFinish() {
-  supabase.auth
-    .signUp({
-      email: signup.email,
-      password: signup.password,
-      options: {
-        data: {
-          first_name: signup.firstName,
-          last_name: signup.lastName,
-          experience: signup.experience,
-          duration: signup.duration,
-        },
-      },
-    })
-    .then(async ({ error }) => {
-      if (error) {
-        alert("Signup failed: " + error.message);
-        return;
-      }
-      const sess = (await supabase.auth.getSession()).data.session;
-      if (sess?.user?.id) {
-        await supabase.from('profiles').upsert({
-          id: sess.user.id,
-          first_name: signup.firstName,
-          last_name: signup.lastName,
-          experience: signup.experience,
-          duration: signup.duration,
-        });
-      } else {
-        alert('Check your email to confirm your account, then log in.');
-      }
-    });
-}
 
-function handleLogout() {
-  supabase.auth.signOut().finally(() => {
-    setSession(null);
-    setAuthTab('login');
-  });
-}
 
 // =============================
 // APP SHELL (topbar + layout)
@@ -356,7 +317,7 @@ function AppShell({ tabs, active, setActive, onLogout, children }) {
             <span className="block w-1 h-1 rounded-full bg-current" />
           </button>
 
-          <button onClick={onLogout || handleLogout} className="hidden sm:inline-flex rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
+          <button onClick={onLogout} className="hidden sm:inline-flex rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
         </div>
       </header>
 
@@ -473,6 +434,46 @@ export default function TradrApp() {
   const [featureRequest, setFeatureRequest] = useState("");
 
   // Preview handlers
+  function handleLogout() {
+    supabase.auth.signOut().finally(() => {
+      setSession(null);
+      setAuthTab('login');
+    });
+  }
+
+  async function previewSignupFinish() {
+    supabase.auth
+      .signUp({
+        email: signup.email,
+        password: signup.password,
+        options: {
+          data: {
+            first_name: signup.firstName,
+            last_name: signup.lastName,
+            experience: signup.experience,
+            duration: signup.duration,
+          },
+        },
+      })
+      .then(async ({ error }) => {
+        if (error) {
+          alert("Signup failed: " + error.message);
+          return;
+        }
+        const sess = (await supabase.auth.getSession()).data.session;
+        if (sess?.user?.id) {
+          await supabase.from('profiles').upsert({
+            id: sess.user.id,
+            first_name: signup.firstName,
+            last_name: signup.lastName,
+            experience: signup.experience,
+            duration: signup.duration,
+          });
+        } else {
+          alert('Check your email to confirm your account, then log in.');
+        }
+      });
+  }
   function previewLogin(e) {
     e?.preventDefault?.();
     supabase.auth
