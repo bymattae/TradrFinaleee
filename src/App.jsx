@@ -487,3 +487,158 @@ export default function TradrApp() {
         }
       });
   }
+
+  // ===== UI HELPERS (inside component) =====
+  function SoonPill() {
+    return (
+      <span className="text-[10px] leading-none px-2 py-1 rounded-full border border-white/15 bg-white/5 text-zinc-300">Coming soon</span>
+    );
+  }
+
+  function DirectoryCard({ title, subtitle, onClick, soon }) {
+    return (
+      <div
+        className={cn(
+          "rounded-3xl p-5 border transition-all duration-150",
+          soon ? "border-white/10 bg-white/5 opacity-60" : "border-emerald-400/20 bg-emerald-500/5 hover:bg-emerald-500/10"
+        )}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-lg font-semibold">{title}</div>
+          {soon && <SoonPill />}
+        </div>
+        <div className="text-sm text-zinc-400">{subtitle}</div>
+        {!soon && (
+          <button onClick={onClick} className="mt-4 rounded-full bg-white text-black text-sm font-semibold px-4 py-2">
+            Open
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ===== RENDER GATE: AUTH vs APP =====
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0a0f1a] to-[#030507] text-white">
+        <div className="mx-auto max-w-md px-5 py-8">
+          <div className="text-3xl font-bold mb-6">tradr</div>
+          <AuthTabs authTab={authTab} setAuthTab={setAuthTab} />
+          {authTab === "login" ? (
+            <LoginForm loginForm={loginForm} setLoginForm={setLoginForm} onSubmit={previewLogin} />
+          ) : (
+            <SignupStepper
+              signup={signup}
+              setSignup={setSignup}
+              signupStep={signupStep}
+              setSignupStep={setSignupStep}
+              onFinish={previewSignupFinish}
+            />
+          )}
+        </div>
+        <footer className="mt-8 pb-8 text-center text-xs text-zinc-500">#tradr - Made with 💙 for Traders</footer>
+      </div>
+    );
+  }
+
+  // ===== LOGGED-IN CONTENT =====
+  function Calculator() {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-3xl bg-white/5 border border-white/10 p-5">
+          <div className="text-xl font-semibold mb-1">Calculator</div>
+          <div className="text-sm text-zinc-400">Calculate your lot size</div>
+        </div>
+
+        <div className="space-y-5">
+          <Field label="Account balance">
+            <Input
+              inputMode="decimal"
+              value={balanceStr}
+              onChange={(e) => setBalanceStr(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="5000"
+            />
+          </Field>
+
+          <Field label="Risk %">
+            <div className="flex items-center gap-2">
+              <Input
+                inputMode="decimal"
+                value={riskPctStr}
+                onChange={(e) => setRiskPctStr(e.target.value.replace(/[^0-9.]/g, ""))}
+                placeholder="1"
+              />
+              <div className="flex items-center gap-2">
+                {[0.5, 1, 1.5, 2].map((p) => (
+                  <Pill key={p} onClick={() => setRiskPctStr(String(p))} active={Number(riskPctStr) === p}>
+                    {p}%
+                  </Pill>
+                ))}
+              </div>
+            </div>
+          </Field>
+
+          <Field label="Stop loss (pips)">
+            <Input
+              inputMode="decimal"
+              value={stopPipsStr}
+              onChange={(e) => setStopPipsStr(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="20"
+            />
+          </Field>
+        </div>
+
+        <div className="rounded-3xl bg-white text-black p-5 text-center font-semibold">
+          Lot size: {Number.isFinite(lots) ? Math.max(0, lots).toFixed(2) : "0.00"}
+        </div>
+      </div>
+    );
+  }
+
+  function Home() {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-3xl bg-white/5 border border-white/10 p-5">
+          <div className="text-xl font-semibold">Welcome back, {firstName}</div>
+        </div>
+
+        <DirectoryCard title="Calculator" subtitle="Calculate your lot size" onClick={() => setActive("calc")} />
+        <DirectoryCard title="Calendar" subtitle="Economic events, powered by AI" soon />
+        <DirectoryCard title="Analysis" subtitle="Insights, powered by AI" soon />
+
+        <div className="rounded-3xl bg-white/5 border border-white/10 p-5">
+          <div className="text-lg font-semibold mb-3">Request a Feature</div>
+          <textarea
+            value={featureRequest}
+            onChange={(e) => setFeatureRequest(e.target.value)}
+            placeholder="What would you like to see next?"
+            className="w-full min-h-[120px] rounded-2xl bg-zinc-900/70 text-white border border-white/10 p-4"
+          />
+          <button
+            onClick={() => {
+              if (!featureRequest.trim()) return;
+              alert("Thanks! Feature request submitted.");
+              setFeatureRequest("");
+            }}
+            className="mt-4 w-full rounded-full bg-white text-black font-semibold px-5 py-3"
+          >
+            Submit Request
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <AppShell
+      tabs={tabs}
+      active={active}
+      setActive={setActive}
+      onLogout={() => supabase.auth.signOut().then(() => { setSession(null); setAuthTab('login'); })}
+    >
+      {active === 'home' && <Home />}
+      {active === 'calc' && <Calculator />}
+      {active !== 'home' && active !== 'calc' && <Home />}
+    </AppShell>
+  );
+}
