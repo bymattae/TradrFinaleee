@@ -634,7 +634,7 @@ export default function TradrApp() {
       tabs={tabs}
       active={active}
       setActive={setActive}
-      onLogout={() => supabase.auth.signOut().then(() => { setSession(null); setAuthTab('login'); })}
+      onLogout={handleLogout}
     >
       {active === 'home' && <Home />}
       {active === 'calc' && <Calculator />}
