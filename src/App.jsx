@@ -266,35 +266,85 @@ function SignupStepper({ signup, setSignup, signupStep, setSignupStep, onFinish 
 // APP SHELL (topbar + layout)
 // =============================
 function AppShell({ tabs, active, setActive, onLogout, children }) {
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  const MenuItem = ({ t }) => (
+    <button
+      key={t.key}
+      onClick={() => {
+        if (!t.soon) setActive(t.key);
+        setMobileOpen(false);
+      }}
+      className={cn(
+        "rounded-full px-3 py-1.5 transition-all duration-150 flex items-center gap-2 w-full text-left",
+        t.key === active && !t.soon
+          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+          : "border border-white/10 text-zinc-300 hover:text-white hover:bg-white/10",
+        t.soon && "opacity-50 cursor-not-allowed"
+      )}
+      title={t.soon ? "This feature is coming soon" : undefined}
+    >
+      <span className="flex-1">{t.label}</span>
+      {t.soon && (
+        <span className="text-[10px] leading-none px-2 py-1 rounded-full border border-white/15 bg-white/5">Soon</span>
+      )}
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0a0f1a] to-[#030507] text-white">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-b from-[#0a0f1a] to-[#030507] text-white">
       <header className="sticky top-0 z-20 backdrop-blur-md bg-black/40 border-b border-white/10">
         <div className="mx-auto max-w-6xl px-5 py-3 flex items-center justify-between">
           <div className="text-3xl font-bold tracking-tight select-none">tradr</div>
-          <nav className="flex items-center gap-2 text-sm">
+
+          {/* Desktop nav */}
+          <nav className="hidden sm:flex items-center gap-2 text-sm">
             {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => !t.soon && setActive(t.key)}
-                className={cn(
-                  "rounded-full px-3 py-1.5 transition-all duration-150 flex items-center gap-2",
-                  t.key === active && !t.soon
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                    : "border border-white/10 text-zinc-300 hover:text-white hover:bg-white/10",
-                  t.soon && "opacity-50 cursor-not-allowed"
-                )}
-                title={t.soon ? "This feature is coming soon" : undefined}
-              >
-                <span>{t.label}</span>
-                {t.soon && (
-                  <span className="text-[10px] leading-none px-2 py-1 rounded-full border border-white/15 bg-white/5">Soon</span>
-                )}
-              </button>
+              <MenuItem key={t.key} t={t} />
             ))}
           </nav>
-          <button onClick={onLogout} className="rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
+
+          {/* Mobile: 3-dots button */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="sm:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/10 bg-white/5 text-zinc-200"
+            aria-label="Open menu"
+          >
+            <span className="block w-1 h-1 rounded-full bg-current" />
+            <span className="block w-1 h-1 rounded-full bg-current mx-1" />
+            <span className="block w-1 h-1 rounded-full bg-current" />
+          </button>
+
+          <button onClick={onLogout} className="hidden sm:inline-flex rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
         </div>
       </header>
+
+      {/* Mobile sheet */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-30 sm:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute right-0 top-0 h-full w-72 bg-[#0b1220] border-l border-white/10 p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xl font-bold">tradr</div>
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="w-8 h-8 rounded-full border border-white/10 text-zinc-300"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {tabs.map((t) => (
+                <MenuItem key={t.key} t={t} />
+              ))}
+            </div>
+            <div className="mt-auto pt-3">
+              <button onClick={() => { setMobileOpen(false); onLogout(); }} className="w-full rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 text-sm text-zinc-300">Log out</button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       <main className="mx-auto max-w-md px-5 py-6">{children}</main>
 
