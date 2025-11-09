@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 // =============================
 // CONFIG (UI-first / Preview)
 // =============================
-const PREVIEW_MODE = true; // keep true for now; swap to real auth later
+const PREVIEW_MODE = false; // keep true for now; swap to real auth later
 const SUPABASE_URL = "https://nclmskfpkqnqsqpjimnt.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jbG1za2Zwa3FucXNxcGppbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3MTQwOTcsImV4cCI6MjA3ODI5MDA5N30.RIaMYi0uTzmsXFSWWupUCnJ0NwbwCrpXjVyFUFOOQDw";
@@ -262,6 +262,47 @@ function SignupStepper({ signup, setSignup, signupStep, setSignupStep, onFinish 
   );
 }
 
+async function previewSignupFinish() {
+  supabase.auth
+    .signUp({
+      email: signup.email,
+      password: signup.password,
+      options: {
+        data: {
+          first_name: signup.firstName,
+          last_name: signup.lastName,
+          experience: signup.experience,
+          duration: signup.duration,
+        },
+      },
+    })
+    .then(async ({ error }) => {
+      if (error) {
+        alert("Signup failed: " + error.message);
+        return;
+      }
+      const sess = (await supabase.auth.getSession()).data.session;
+      if (sess?.user?.id) {
+        await supabase.from('profiles').upsert({
+          id: sess.user.id,
+          first_name: signup.firstName,
+          last_name: signup.lastName,
+          experience: signup.experience,
+          duration: signup.duration,
+        });
+      } else {
+        alert('Check your email to confirm your account, then log in.');
+      }
+    });
+}
+
+function handleLogout() {
+  supabase.auth.signOut().finally(() => {
+    setSession(null);
+    setAuthTab('login');
+  });
+}
+
 // =============================
 // APP SHELL (topbar + layout)
 // =============================
@@ -315,7 +356,7 @@ function AppShell({ tabs, active, setActive, onLogout, children }) {
             <span className="block w-1 h-1 rounded-full bg-current" />
           </button>
 
-          <button onClick={onLogout} className="hidden sm:inline-flex rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
+          <button onClick={onLogout || handleLogout} className="hidden sm:inline-flex rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 text-sm text-zinc-300">Log out</button>
         </div>
       </header>
 
@@ -383,6 +424,40 @@ export default function TradrApp() {
     return raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
+  // Boot session + profile name
+  React.useEffect(() => {
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session ?? null);
+      if (session?.user?.id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('first_name')
+          .eq('id', session.user.id)
+          .single();
+        setFirstName(prof?.first_name || deriveName(session.user.email));
+      }
+    };
+    init();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, session) => {
+      setSession(session ?? null);
+      if (session?.user?.id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('first_name')
+          .eq('id', session.user.id)
+          .single();
+        setFirstName(prof?.first_name || deriveName(session.user.email));
+        setActive('home');
+      } else {
+        setAuthTab('login');
+      }
+    });
+
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   // Calculator state (keep strings to avoid unfocus)
   const [balanceStr, setBalanceStr] = useState("5000");
   const [riskPctStr, setRiskPctStr] = useState("1");
@@ -400,128 +475,14 @@ export default function TradrApp() {
   // Preview handlers
   function previewLogin(e) {
     e?.preventDefault?.();
-    setSession({ user: { id: "preview" } });
-    setFirstName(deriveName(loginForm.email));
-    setActive("home");
+    supabase.auth
+      .signInWithPassword({
+        email: loginForm.email,
+        password: loginForm.password,
+      })
+      .then(({ error }) => {
+        if (error) {
+          alert("Login failed: " + error.message);
+        }
+      });
   }
-  function previewSignupFinish() {
-    setSession({ user: { id: "preview" } });
-    setFirstName(signup.firstName ? signup.firstName : deriveName(signup.email));
-    setActive("home");
-  }
-  function handleLogout() {
-    setSession(null);
-    setAuthTab("login");
-  }
-  function handleFeatureSubmit(e) {
-    e.preventDefault();
-    setFeatureRequest("");
-    alert("✅ Feature request captured (preview)");
-  }
-
-  // ===== Gate: Auth vs App =====
-  if (!session) {
-    return (
-      <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#0a0f1a] to-[#030507] text-white flex items-center justify-center px-6">
-        <div className="pointer-events-none absolute -top-20 -left-40 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -right-40 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="w-full max-w-md relative">
-          <div className="text-left mb-5">
-            <h1 className="text-3xl font-extrabold tracking-tight">tradr</h1>
-          </div>
-          <AuthTabs authTab={authTab} setAuthTab={setAuthTab} />
-          {authTab === "login" ? (
-            <LoginForm loginForm={loginForm} setLoginForm={setLoginForm} onSubmit={previewLogin} />
-          ) : (
-            <SignupStepper
-              signup={signup}
-              setSignup={setSignup}
-              signupStep={signupStep}
-              setSignupStep={setSignupStep}
-              onFinish={previewSignupFinish}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ===== Logged-in App =====
-  return (
-    <AppShell tabs={tabs} active={active} setActive={setActive} onLogout={handleLogout}>
-      {active === "home" && (
-        <div className="space-y-8">
-          {/* Welcome box */}
-          <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 p-7 md:p-8 shadow-[0_0_40px_rgba(16,185,129,0.08)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-zinc-400">Welcome back,</div>
-                <div className="text-2xl font-bold text-white">{firstName}</div>
-              </div>
-              <div className="hidden sm:block text-3xl">🤝</div>
-            </div>
-          </div>
-
-          {/* Directory cards */}
-          <div className="grid gap-3">
-            <div
-              className="rounded-xl bg-gradient-to-r from-[#111827] to-[#0b1220] border border-white/10 p-4 hover:border-emerald-400/30 transition cursor-pointer"
-              onClick={() => setActive("calc")}
-            >
-              <h3 className="font-semibold text-lg text-white">📊 Calculator</h3>
-              <p className="text-xs text-zinc-400 mt-1">Calculate your lot size</p>
-            </div>
-            <div className="rounded-xl bg-[#0b1220]/60 border border-white/10 p-4 opacity-70 cursor-not-allowed" title="This feature is coming soon">
-              <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                📅 Calendar <span className="text-[10px] leading-none px-2 py-1 rounded-full border border-white/15 bg-white/5">Coming soon</span>
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">Economic events, powered by AI</p>
-            </div>
-            <div className="rounded-xl bg-[#0b1220]/60 border border-white/10 p-4 opacity-70 cursor-not-allowed" title="This feature is coming soon">
-              <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                📈 Analysis <span className="text-[10px] leading-none px-2 py-1 rounded-full border border-white/15 bg-white/5">Coming soon</span>
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">Insights, powered by AI</p>
-            </div>
-          </div>
-
-          {/* Feature request */}
-          <form onSubmit={handleFeatureSubmit} className="rounded-2xl border border-white/10 bg-[#0b1220]/60 p-5 backdrop-blur-md">
-            <h4 className="text-sm font-semibold mb-2 text-white">💡 Request a Feature</h4>
-            <textarea
-              className="w-full rounded-xl bg-zinc-900/70 text-white border border-white/10 px-3 py-2 text-sm focus:border-emerald-400 outline-none"
-              rows={3}
-              placeholder="What would you like to see next?"
-              value={featureRequest}
-              onChange={(e) => setFeatureRequest(e.target.value)}
-            />
-            <button type="submit" className="mt-3 w-full rounded-full bg-white text-black font-semibold px-5 py-3 hover:opacity-90 transition transform active:translate-y-[1px]">Submit Request</button>
-          </form>
-        </div>
-      )}
-
-      {active === "calc" && (
-        <div className="grid grid-cols-1 gap-5 sm:gap-6">
-          <div className="rounded-2xl border border-white/10 bg-[#0b1220]/70 p-5 shadow-xl backdrop-blur-md">
-            <div className="grid grid-cols-1 gap-4">
-              <Field label="Balance (USD)"><Input type="text" inputMode="decimal" value={balanceStr} onChange={(e) => setBalanceStr(e.target.value)} /></Field>
-              <Field label="Risk %"><Input type="text" inputMode="decimal" value={riskPctStr} onChange={(e) => setRiskPctStr(e.target.value)} /></Field>
-              <Field label="Stop (pips)"><Input type="text" inputMode="decimal" value={stopPipsStr} onChange={(e) => setStopPipsStr(e.target.value)} /></Field>
-            </div>
-            <div className="mt-6 rounded-2xl bg-[#05080f] border border-white/10 p-5 text-center">
-              <div className="text-xs uppercase tracking-wide text-zinc-400">Lot Size</div>
-              <div className="mt-1 text-4xl font-bold text-emerald-400">{new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(lots)}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {active !== "calc" && active !== "home" && (
-        <div className="rounded-2xl border border-white/10 bg-[#0b1220]/70 p-6 text-center text-sm text-zinc-300">
-          <p className="font-semibold text-white">{tabs.find((t) => t.key === active)?.label}</p>
-          <p className="mt-1 text-zinc-400">This feature is coming soon 🚧</p>
-        </div>
-      )}
-    </AppShell>
-  );
-}
