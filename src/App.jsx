@@ -17,16 +17,36 @@ function cn(...a) {
   return a.filter(Boolean).join(" ");
 }
 
-const Input = memo(function Input({ className, ...props }) {
+const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStart, onFocus, onBlur, ...props }) {
   return (
     <input
       {...props}
+      autoComplete="off"
       className={cn(
         "w-full rounded-full bg-zinc-900/70 text-white placeholder-zinc-500",
         "border border-white/10 focus:border-emerald-400 outline-none",
         "px-5 py-3 text-base transition-all duration-150",
         className
       )}
+      // Prevent parent handlers from stealing focus (fixes unfocus bug in dashboard)
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onMouseDown?.(e);
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        onTouchStart?.(e);
+      }}
+      onFocus={(e) => {
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        onBlur?.(e);
+      }}
     />
   );
 });
