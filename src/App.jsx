@@ -17,7 +17,7 @@ function cn(...a) {
   return a.filter(Boolean).join(" ");
 }
 
-const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStart, onFocus, onBlur, ...props }) {
+const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStart, ...props }) {
   return (
     <input
       {...props}
@@ -28,7 +28,6 @@ const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStar
         "px-5 py-3 text-base transition-all duration-150",
         className
       )}
-      // Prevent parent handlers from stealing focus (fixes unfocus bug in dashboard)
       onClick={(e) => {
         e.stopPropagation();
         onClick?.(e);
@@ -41,12 +40,6 @@ const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStar
         e.stopPropagation();
         onTouchStart?.(e);
       }}
-      onFocus={(e) => {
-        onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        onBlur?.(e);
-      }}
     />
   );
 });
@@ -54,9 +47,7 @@ const Input = memo(function Input({ className, onClick, onMouseDown, onTouchStar
 const Field = memo(function Field({ label, children }) {
   return (
     <label className="block">
-      {label && (
-        <div className="mb-1.5 text-sm font-medium text-zinc-300">{label}</div>
-      )}
+      {label && <div className="mb-1.5 text-sm font-medium text-zinc-300">{label}</div>}
       {children}
     </label>
   );
@@ -326,6 +317,57 @@ function SignupForm({ value, onChange, onSubmit }) {
 }
 
 // =============================
+// Calculator (focus-safe, memoized)
+// =============================
+const Calculator = memo(function Calculator() {
+  const [balanceStr, setBalanceStr] = useState("5000");
+  const [riskPctStr, setRiskPctStr] = useState("1");
+  const [stopPipsStr, setStopPipsStr] = useState("20");
+
+  const balance = parseFloat(balanceStr) || 0;
+  const riskPct = parseFloat(riskPctStr) || 0;
+  const stopPips = parseFloat(stopPipsStr) || 0;
+  const PIP_VALUE_PER_LOT = 10; // majors approx
+  const riskAmount = balance * (riskPct / 100);
+  const lots = stopPips > 0 ? riskAmount / (stopPips * PIP_VALUE_PER_LOT) : 0;
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <div className="text-xl font-semibold mb-1">Calculator</div>
+        <div className="text-sm text-zinc-400">Calculate your lot size</div>
+      </div>
+
+      <div className="space-y-5">
+        <Field label="Balance (USD)">
+          <Input type="text" inputMode="decimal" value={balanceStr} onChange={(e) => setBalanceStr(e.target.value.replace(/[^0-9.]/g, ""))} />
+        </Field>
+        <Field label="Risk %">
+          <div className="flex items-center gap-2">
+            <Input type="text" inputMode="decimal" value={riskPctStr} onChange={(e) => setRiskPctStr(e.target.value.replace(/[^0-9.]/g, ""))} />
+            <div className="flex items-center gap-2">
+              {[0.5, 1, 1.5, 2].map((p) => (
+                <Pill key={p} onClick={() => setRiskPctStr(String(p))} active={Number(riskPctStr) === p}>
+                  {p}%
+                </Pill>
+              ))}
+            </div>
+          </div>
+        </Field>
+        <Field label="Stop (pips)">
+          <Input type="text" inputMode="decimal" value={stopPipsStr} onChange={(e) => setStopPipsStr(e.target.value.replace(/[^0-9.]/g, ""))} />
+        </Field>
+      </div>
+
+      <div className="rounded-2xl bg-[#05080f] border border-white/10 p-5 text-center">
+        <div className="text-xs uppercase tracking-wide text-zinc-400">Lot Size</div>
+        <div className="mt-1 text-4xl font-bold text-emerald-400">{new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Math.max(0, lots))}</div>
+      </div>
+    </div>
+  );
+});
+
+// =============================
 // Main App
 // =============================
 export default function TradrApp() {
@@ -342,35 +384,6 @@ export default function TradrApp() {
   const [firstName, setFirstName] = useState("Trader");
   const [featureRequest, setFeatureRequest] = useState("");
 
-  // ----- Calculator state (strings to avoid unfocus)
-  const [balanceStr, setBalanceStr] = useState("5000");
-  const [riskPctStr, setRiskPctStr] = useState("1");
-  const [stopPipsStr, setStopPipsStr] = useState("20");
-  const balance = parseFloat(balanceStr) || 0;
-  const riskPct = parseFloat(riskPctStr) || 0;
-  const stopPips = parseFloat(stopPipsStr) || 0;
-  const PIP_VALUE_PER_LOT = 10; // major pairs approximation
-  const riskAmount = balance * (riskPct / 100);
-  const lots = stopPips > 0 ? riskAmount / (stopPips * PIP_VALUE_PER_LOT) : 0;
-
-  // ----- Helpers
-  function deriveName(email) {
-    if (!email) return "Trader";
-    const raw = email.split("@")[0];
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
-  }
-
-  async function handleLogout() {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setSession(null);
-      setFirstName("Trader");
-      setAuthTab("login");
-      setActive("home");
-    }
-  }
-
   // ----- Auth bootstrap & profile name
   useEffect(() => {
     const init = async () => {
@@ -382,7 +395,7 @@ export default function TradrApp() {
           .select("first_name")
           .eq("id", session.user.id)
           .single();
-        setFirstName(prof?.first_name || deriveName(session.user.email));
+        setFirstName(prof?.first_name || (session.user.email ? session.user.email.split("@")[0] : "Trader"));
       }
     };
     init();
@@ -395,7 +408,7 @@ export default function TradrApp() {
           .select("first_name")
           .eq("id", session.user.id)
           .single();
-        setFirstName(prof?.first_name || deriveName(session.user.email));
+        setFirstName(prof?.first_name || (session.user.email ? session.user.email.split("@")[0] : "Trader"));
         setActive("home");
       } else {
         setAuthTab("login");
@@ -431,7 +444,6 @@ export default function TradrApp() {
       alert("Signup failed: " + error.message);
       return;
     }
-    // if confirmations are ON, session may be null until email confirm
     const sess = (await supabase.auth.getSession()).data.session;
     if (sess?.user?.id) {
       await supabase.from("profiles").upsert({
@@ -443,6 +455,17 @@ export default function TradrApp() {
       });
     } else {
       alert("Check your email to confirm your account, then log in.");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setSession(null);
+      setFirstName("Trader");
+      setAuthTab("login");
+      setActive("home");
     }
   }
 
@@ -505,43 +528,6 @@ export default function TradrApp() {
           />
           <button type="submit" className="mt-3 w-full rounded-full bg-white text-black font-semibold px-5 py-3 hover:opacity-90 transition active:translate-y-px">Submit Request</button>
         </form>
-      </div>
-    );
-  }
-
-  function Calculator() {
-    return (
-      <div className="space-y-5">
-        <div className="rounded-3xl bg-white/5 border border-white/10 p-5">
-          <div className="text-xl font-semibold mb-1">Calculator</div>
-          <div className="text-sm text-zinc-400">Calculate your lot size</div>
-        </div>
-
-        <div className="space-y-5">
-          <Field label="Balance (USD)">
-            <Input type="text" inputMode="decimal" value={balanceStr} onChange={(e) => setBalanceStr(e.target.value.replace(/[^0-9.]/g, ""))} />
-          </Field>
-          <Field label="Risk %">
-            <div className="flex items-center gap-2">
-              <Input type="text" inputMode="decimal" value={riskPctStr} onChange={(e) => setRiskPctStr(e.target.value.replace(/[^0-9.]/g, ""))} />
-              <div className="flex items-center gap-2">
-                {[0.5, 1, 1.5, 2].map((p) => (
-                  <Pill key={p} onClick={() => setRiskPctStr(String(p))} active={Number(riskPctStr) === p}>
-                    {p}%
-                  </Pill>
-                ))}
-              </div>
-            </div>
-          </Field>
-          <Field label="Stop (pips)">
-            <Input type="text" inputMode="decimal" value={stopPipsStr} onChange={(e) => setStopPipsStr(e.target.value.replace(/[^0-9.]/g, ""))} />
-          </Field>
-        </div>
-
-        <div className="rounded-2xl bg-[#05080f] border border-white/10 p-5 text-center">
-          <div className="text-xs uppercase tracking-wide text-zinc-400">Lot Size</div>
-          <div className="mt-1 text-4xl font-bold text-emerald-400">{new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Math.max(0, lots))}</div>
-        </div>
       </div>
     );
   }
